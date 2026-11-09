@@ -19889,6 +19889,25 @@
             "minimum": 1,
             "type": "integer"
           },
+          "requester_quality_profile_allowlist": {
+            "description": "Profiles the picker offers, each \"connection-id:profile-id\"; empty offers every profile the requester's playback ceiling allows. Absent on update keeps the stored value",
+            "examples": [
+              [
+                "c-1:4"
+              ]
+            ],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "requester_quality_profiles": {
+            "description": "Let requesters pick the Sonarr/Radarr quality profile their request downloads with; absent on update keeps the stored value",
+            "examples": [
+              true
+            ],
+            "type": "boolean"
+          },
           "requests_enabled": {
             "type": "boolean"
           },
@@ -39873,6 +39892,28 @@
             ],
             "type": "string"
           },
+          "quality_profile_4k": {
+            "description": "The picked profile allows 2160p, so the request also asks for the 4K copy",
+            "examples": [
+              false
+            ],
+            "type": "boolean"
+          },
+          "quality_profile_id": {
+            "description": "The Sonarr/Radarr quality profile the requester picked; absent when the server's own profile is used",
+            "examples": [
+              4
+            ],
+            "format": "int64",
+            "type": "integer"
+          },
+          "quality_profile_name": {
+            "description": "That profile's name when the request was made, for display after the profile is renamed or deleted",
+            "examples": [
+              "French HD 1080p"
+            ],
+            "type": "string"
+          },
           "requested_by_profile_id": {
             "description": "Opaque identifier",
             "examples": [
@@ -40037,6 +40078,19 @@
           "poster_path": {
             "description": "TMDB image path",
             "type": "string"
+          },
+          "quality_profile_connection_id": {
+            "description": "The download server the profile belongs to, from getRequestProfileOptions; only needed when two servers share a profile id",
+            "type": "string"
+          },
+          "quality_profile_id": {
+            "description": "Quality profile to download with, from getRequestProfileOptions. A 4K profile also asks for the 1080 copy; any other profile keeps the download HD only. Omitted: the server's configured profile",
+            "examples": [
+              4
+            ],
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
           },
           "seasons": {
             "description": "Series only: the season numbers to request, starting at 1 (a season below 1 is refused). Omitted: every aired season not yet complete in the library",
@@ -49351,6 +49405,97 @@
           "requestable",
           "following",
           "requested_by_viewer"
+        ],
+        "type": "object"
+      },
+      "RequestProfileOption": {
+        "additionalProperties": false,
+        "properties": {
+          "default": {
+            "description": "The profile the server downloads with when the requester picks nothing",
+            "examples": [
+              true
+            ],
+            "type": "boolean"
+          },
+          "id": {
+            "examples": [
+              4
+            ],
+            "format": "int64",
+            "type": "integer"
+          },
+          "is_4k": {
+            "description": "The profile allows 2160p, so picking it asks for a 4K copy as well as the 1080 one",
+            "examples": [
+              false
+            ],
+            "type": "boolean"
+          },
+          "name": {
+            "examples": [
+              "French HD 1080p"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "is_4k",
+          "default"
+        ],
+        "type": "object"
+      },
+      "RequestProfileOptions": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "examples": [
+              true
+            ],
+            "type": "boolean"
+          },
+          "servers": {
+            "items": {
+              "$ref": "#/components/schemas/RequestProfileServer"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "enabled",
+          "servers"
+        ],
+        "type": "object"
+      },
+      "RequestProfileServer": {
+        "additionalProperties": false,
+        "properties": {
+          "connection_id": {
+            "description": "Send as quality_profile_connection_id when two servers share a profile id",
+            "examples": [
+              "c-9f2"
+            ],
+            "type": "string"
+          },
+          "profiles": {
+            "items": {
+              "$ref": "#/components/schemas/RequestProfileOption"
+            },
+            "type": "array"
+          },
+          "server_name": {
+            "examples": [
+              "Radarr"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "connection_id",
+          "server_name",
+          "profiles"
         ],
         "type": "object"
       },
@@ -213413,6 +213558,177 @@
           }
         ],
         "summary": "List the account's media requests, newest first.",
+        "tags": [
+          "requests"
+        ],
+        "x-silo-class": "profile_scoped",
+        "x-silo-service-backed": true
+      }
+    },
+    "/api/v2/requests/profile-options": {
+      "get": {
+        "operationId": "getRequestProfileOptions",
+        "parameters": [
+          {
+            "description": "The household profile acting for this request; it must belong to the authenticated account.",
+            "in": "header",
+            "name": "X-Profile-Id",
+            "required": true,
+            "schema": {
+              "examples": [
+                "1"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Verification proof for a PIN-locked profile, issued by POST /api/v2/profiles/{id}/verify-pin; required only when the declared profile is locked",
+            "in": "header",
+            "name": "X-Profile-Token",
+            "schema": {
+              "examples": [
+                "pvt_5f3a9c1e7b2d4e8fa0c6"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Which request's profiles to list: movies come from Radarr, series from Sonarr",
+            "explode": false,
+            "in": "query",
+            "name": "media_type",
+            "required": true,
+            "schema": {
+              "description": "Which request's profiles to list: movies come from Radarr, series from Sonarr",
+              "enum": [
+                "movie",
+                "series"
+              ],
+              "examples": [
+                "movie"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestProfileOptions"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "406": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Acceptable"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "List the quality profiles a request may download with, and whether requesters may choose one.",
         "tags": [
           "requests"
         ],
