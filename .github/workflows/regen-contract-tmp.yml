@@ -38,11 +38,18 @@ jobs:
       - name: Generate the web contract types
         working-directory: web
         run: pnpm run generate:apiv2
+      - name: Regenerate the route manifests and contract fixtures
+        run: |
+          for pkg in ./internal/audiobooks/abs/ ./internal/jellycompat/ ./internal/proxy/; do
+            go test -count=1 -run '^TestMediaRouteManifest$' "$pkg" -update-route-manifest || true
+          done
+          go test -count=1 -run '^TestContractFixtures$' ./internal/apiv2/ -update-apiv2-fixtures
       - name: Commit the regenerated files
         run: |
           git config user.name "hermes-agent"
           git config user.email "agent@hermes.local"
           git add contracts/api/v2/openapi.json web/src/api/v2/schema.ts web/src/api/v2/operations.ts
+          git add contracts/api/v2/fixtures internal/audiobooks/abs internal/jellycompat internal/proxy
           if git diff --cached --quiet; then
             echo "contract already up to date"
           else

@@ -42,7 +42,9 @@ export function qualityPickerAvailable(options: RequestProfileOptions | undefine
  * the first. Used only for the select's starting label — a request that never
  * touches the picker sends no profile at all, so the server keeps its own.
  */
-export function defaultProfileChoice(options: RequestProfileOptions | undefined): FlattenedProfile | null {
+export function defaultProfileChoice(
+  options: RequestProfileOptions | undefined,
+): FlattenedProfile | null {
   const profiles = flattenProfiles(options);
   return profiles.find((profile) => profile.default) ?? profiles[0] ?? null;
 }
@@ -93,9 +95,7 @@ export default function RequestQualityPicker({
         disabled={disabled}
         onChange={(event) => {
           const next = profiles.find((profile) => profileKey(profile) === event.target.value);
-          onChange(
-            next ? { connectionId: next.connectionId, profileId: next.id } : null,
-          );
+          onChange(next ? { connectionId: next.connectionId, profileId: next.id } : null);
         }}
       >
         {servers.map((server) => (
