@@ -63,3 +63,27 @@ already a key of that config.
   allowlist, the tier the pick is applied to, the quality policy (a 1080 pick
   never gets a 4K copy), and the listing endpoint against a fake Radarr.
 - `pnpm test`: the picker component and the season dialog sending the pick.
+
+## Trying it on a real install
+
+The branch is `feature/requester-quality-profile` on the fork (mirrored to
+`apiv2`, the branch name the image pipeline builds from).
+
+Either pull the image the fork publishes after a green CI:
+
+```sh
+docker login ghcr.io -u <github-user>        # the package starts private
+docker pull ghcr.io/<github-user>/silo-server:<commit-sha>
+```
+
+and point `SILO_OMNIBUS_IMAGE` (or the compose `image:`) at it, or build it on
+the server from the branch:
+
+```sh
+git fetch origin feature/requester-quality-profile
+git checkout feature/requester-quality-profile
+docker build -t silo:quality-profiles .
+```
+
+Then, in Settings → Requests, turn on **Let people choose a quality profile**
+and open a movie: the Request button now asks for the profile first.
