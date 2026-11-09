@@ -234,5 +234,3 @@ func TestRequesterProfileChoicesListsProfilesAndHides4K(t *testing.T) {
 		t.Fatalf("choices = %+v, want nothing offered", off)
 	}
 }
-
-func intPtr(v int) *int { return &v }
