@@ -1,0 +1,58 @@
+name: Regenerate API contract (temporary)
+
+# Development aid on a fork: the sandbox that authored this branch cannot
+# compile the apiv2 package or run pnpm, so the generated contract is produced
+# here and committed back. Remove this file before opening a pull request.
+
+on:
+  push:
+    branches: [feature/seerr-quality-profile]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  regenerate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: feature/seerr-quality-profile
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.26.4"
+      - name: Install the CGO dependencies
+        run: sudo apt-get update && sudo apt-get install -y libvips-dev
+      - name: Generate the OpenAPI artifact
+        run: go run ./cmd/apiv2-openapi -out contracts/api/v2/openapi.json
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 10.32.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+      - name: Install the web dependencies
+        working-directory: web
+        run: pnpm install --frozen-lockfile
+      - name: Generate the web contract types
+        working-directory: web
+        run: pnpm run generate:apiv2
+      - name: Regenerate the route manifests and contract fixtures
+        run: |
+          for pkg in ./internal/api/ ./internal/audiobooks/abs/ ./internal/jellycompat/ ./internal/proxy/; do
+            go test -count=1 -run '^TestMediaRouteManifest$' "$pkg" -update-route-manifest || true
+          done
+          go test -count=1 -run '^TestContractFixtures$' ./internal/apiv2/ -update-apiv2-fixtures
+      - name: Commit the regenerated files
+        run: |
+          git config user.name "hermes-agent"
+          git config user.email "agent@hermes.local"
+          git add contracts/api/v2/openapi.json web/src/api/v2/schema.ts web/src/api/v2/operations.ts
+          git add contracts/api/v2/fixtures internal/api/testdata internal/audiobooks/abs internal/jellycompat internal/proxy
+          if git diff --cached --quiet; then
+            echo "contract already up to date"
+          else
+            git commit -m "chore: regenerate the api contract"
+            git push
+          fi

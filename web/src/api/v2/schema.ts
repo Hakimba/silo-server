@@ -11583,6 +11583,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v2/requests/profile-options": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List the quality profiles a request may download with, and whether requesters may choose one. */
+    get: operations["getRequestProfileOptions"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v2/requests/search": {
     parameters: {
       query?: never;
@@ -21043,6 +21060,18 @@ export interface components {
       global_max_requests: number;
       /** Format: int64 */
       global_window_days: number;
+      /**
+       * @description Profiles the picker offers, each "connection-id:profile-id"; empty offers every profile the requester's playback ceiling allows. Absent on update keeps the stored value
+       * @example [
+       *       "c-1:4"
+       *     ]
+       */
+      requester_quality_profile_allowlist?: string[];
+      /**
+       * @description Let requesters pick the Sonarr/Radarr quality profile their request downloads with; absent on update keeps the stored value
+       * @example true
+       */
+      requester_quality_profiles?: boolean;
       requests_enabled: boolean;
       /**
        * @description Adding a title that is not in the library to a watchlist also requests it; absent on update keeps the stored value
@@ -29145,6 +29174,17 @@ export interface components {
       /** @example tmdb */
       provider: string;
       /**
+       * Format: int64
+       * @description The Sonarr/Radarr quality profile the requester picked; absent when the server's own profile is used
+       * @example 4
+       */
+      quality_profile_id?: number;
+      /**
+       * @description That profile's name when the request was made, for display after the profile is renamed or deleted
+       * @example French HD 1080p
+       */
+      quality_profile_name?: string;
+      /**
        * @description Opaque identifier
        * @example p-owner
        */
@@ -29219,6 +29259,14 @@ export interface components {
       overview?: string;
       /** @description TMDB image path */
       poster_path?: string;
+      /** @description The download server the profile belongs to, from getRequestProfileOptions; only needed when two servers share a profile id */
+      quality_profile_connection_id?: string;
+      /**
+       * Format: int64
+       * @description Quality profile to download with, from getRequestProfileOptions. A 4K profile also asks for the 1080 copy; any other profile keeps the download HD only. Omitted: the server's configured profile
+       * @example 4
+       */
+      quality_profile_id?: number;
       /**
        * @description Series only: the season numbers to request, starting at 1 (a season below 1 is refused). Omitted: every aired season not yet complete in the library
        * @example [
@@ -33159,6 +33207,35 @@ export interface components {
        * @example pending
        */
       status?: string;
+    };
+    RequestProfileOption: {
+      /**
+       * @description The profile the server downloads with when the requester picks nothing
+       * @example true
+       */
+      default: boolean;
+      /**
+       * Format: int64
+       * @example 4
+       */
+      id: number;
+      /** @example French HD 1080p */
+      name: string;
+    };
+    RequestProfileOptions: {
+      /** @example true */
+      enabled: boolean;
+      servers: components["schemas"]["RequestProfileServer"][];
+    };
+    RequestProfileServer: {
+      /**
+       * @description Send as quality_profile_connection_id when two servers share a profile id
+       * @example c-9f2
+       */
+      connection_id: string;
+      profiles: components["schemas"]["RequestProfileOption"][];
+      /** @example Radarr */
+      server_name: string;
     };
     RequestSeasonProgress: {
       /**
@@ -138957,6 +139034,124 @@ export interface operations {
       };
       /** @description Not Acceptable */
       406: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["Problem"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["Problem"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["Problem"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["Problem"];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["Problem"];
+        };
+      };
+    };
+  };
+  getRequestProfileOptions: {
+    parameters: {
+      query: {
+        /** @description Which request's profiles to list: movies come from Radarr, series from Sonarr */
+        media_type: "movie" | "series";
+      };
+      header: {
+        /** @description The household profile acting for this request; it must belong to the authenticated account. */
+        "X-Profile-Id": string;
+        /** @description Verification proof for a PIN-locked profile, issued by POST /api/v2/profiles/{id}/verify-pin; required only when the declared profile is locked */
+        "X-Profile-Token"?: string;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["RequestProfileOptions"];
+        };
+      };
+      /** @description Bad Request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["Problem"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["Problem"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["Problem"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["Problem"];
+        };
+      };
+      /** @description Not Acceptable */
+      406: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["Problem"];
+        };
+      };
+      /** @description Conflict */
+      409: {
         headers: {
           [name: string]: unknown;
         };

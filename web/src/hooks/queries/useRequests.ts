@@ -16,6 +16,7 @@ import {
   followRequestMediaV2,
   getDiscoverRowV2,
   getRequestMediaDetailV2,
+  getRequestProfileOptionsV2,
   unfollowRequestMediaV2,
   listDiscoverGenresV2,
   listDiscoverNetworksV2,
@@ -34,6 +35,7 @@ import type {
   RequestDiscoverySection,
   RequestListParams,
   RequestMediaPage,
+  RequestProfileOptions,
   RequestSearchMediaType,
   RequestMediaType,
 } from "@/api/types";
@@ -277,6 +279,23 @@ export function useRequestSearch(
 function sameSearchOtherPage(previous: readonly unknown[], next: readonly unknown[]): boolean {
   // requestKeys.search: ["requests", "search", viewerKey, mediaType, query, page]
   return previous.slice(0, 5).every((part, index) => part === next[index]);
+}
+
+/**
+ * The quality profiles a request may download with, for the dialog that is
+ * open. Reads only while enabled: a server that has the picker off, or a
+ * dialog a viewer never opened, costs nothing.
+ */
+export function useRequestProfileOptions(mediaType: RequestMediaType, enabled: boolean) {
+  const { profile } = useCurrentProfile();
+  const viewerKey = profile?.id ?? "anon";
+  return useQuery<RequestProfileOptions>({
+    queryKey: requestKeys.profileOptions(mediaType, viewerKey),
+    queryFn: ({ signal }) => getRequestProfileOptionsV2(mediaType, signal),
+    enabled: enabled && Boolean(profile?.id),
+    staleTime: 60_000,
+    retry: false,
+  });
 }
 
 export function useCreateMediaRequest() {

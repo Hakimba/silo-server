@@ -118,6 +118,9 @@ var stricterFlags = func() []stricterFlag {
 		flag("request_settings", "requests_enabled", false, "requests"),
 		flag("request_settings", "global_auto_approval_enabled", false, "requests"),
 		flag("request_settings", "watchlist_requests", false, "requests"),
+		// Letting requesters pick the download's quality profile widens what
+		// they control, so a restore never turns it on by itself.
+		flag("request_settings", "requester_quality_profiles", false, "requests"),
 		// A child profile, and a profile's restrictions, never loosen.
 		{table: tableUserProfiles, column: "is_child", stricter: true, key: profileKey, scope: everyRow,
 			describe: `format('profile %s kept a child profile', t.name)`},

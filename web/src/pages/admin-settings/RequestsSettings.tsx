@@ -34,6 +34,8 @@ interface GeneralDraft {
   force_dual_quality: boolean;
   /** Absent from servers without watchlist requests; the control hides. */
   watchlist_requests: boolean | undefined;
+  /** Absent from servers without the profile picker; the control hides. */
+  requester_quality_profiles: boolean | undefined;
 }
 
 function generalDraft(settings: RequestSettings): GeneralDraft {
@@ -44,6 +46,7 @@ function generalDraft(settings: RequestSettings): GeneralDraft {
     window_days: String(settings.global_window_days),
     force_dual_quality: settings.force_dual_quality,
     watchlist_requests: settings.watchlist_requests,
+    requester_quality_profiles: settings.requester_quality_profiles,
   };
 }
 
@@ -151,6 +154,7 @@ function RequestsSettingsContent({ routing }: { routing: boolean }) {
         global_window_days: windowDays ?? base.global_window_days,
         force_dual_quality: draft.force_dual_quality,
         watchlist_requests: draft.watchlist_requests,
+        requester_quality_profiles: draft.requester_quality_profiles,
         updated_at: base.updated_at,
         etag: base.etag,
       });
@@ -286,6 +290,20 @@ function RequestsSettingsContent({ routing }: { routing: boolean }) {
                     value={String(draft.watchlist_requests)}
                     onChange={(value) => editGeneral({ watchlist_requests: value === "true" })}
                     dirty={draft.watchlist_requests !== baseGeneral.watchlist_requests}
+                  />
+                ) : null}
+                {draft.requester_quality_profiles !== undefined ? (
+                  <SettingField
+                    label="Let people choose a quality profile"
+                    type="toggle"
+                    description="The request dialog offers the quality profiles your Sonarr and Radarr publish, so a request can download with a different profile than the server's own. Choosing a 4K profile also downloads the 1080 copy; 4K profiles are offered only to profiles whose playback limit allows 4K."
+                    value={String(draft.requester_quality_profiles)}
+                    onChange={(value) =>
+                      editGeneral({ requester_quality_profiles: value === "true" })
+                    }
+                    dirty={
+                      draft.requester_quality_profiles !== baseGeneral.requester_quality_profiles
+                    }
                   />
                 ) : null}
                 <SettingField

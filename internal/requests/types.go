@@ -208,8 +208,39 @@ type Settings struct {
 	// WatchlistRequests lets adding a title that is not in the library to a
 	// watchlist request it too. v2 only; the frozen v1 shape does not carry
 	// it, and a v1 settings write keeps the stored value.
-	WatchlistRequests bool      `json:"-"`
-	UpdatedAt         time.Time `json:"updated_at"`
+	WatchlistRequests bool `json:"-"`
+	// RequesterQualityProfiles lets requesters pick the Sonarr/Radarr quality
+	// profile their request downloads with. v1 never carries it and keeps the
+	// stored value, like WatchlistRequests.
+	RequesterQualityProfiles bool `json:"-"`
+	// RequesterQualityProfileAllowlist narrows the picker to these profiles,
+	// each "connection-id:profile-id". Empty means every profile the
+	// requester's playback ceiling allows.
+	RequesterQualityProfileAllowlist []string  `json:"-"`
+	UpdatedAt                        time.Time `json:"updated_at"`
+}
+
+// ProfileChoice is one Sonarr/Radarr quality profile a requester may pick.
+type ProfileChoice struct {
+	ID   int    `json:"id"`
+	Name string `json:"name"`
+	// Default marks the server's own profile, offered so the dialog can name
+	// it; a request that picks it stores no profile.
+	Default bool `json:"default"`
+}
+
+// ServerProfileChoices is one download server's profiles for a media type.
+type ServerProfileChoices struct {
+	ConnectionID string          `json:"connection_id"`
+	ServerName   string          `json:"server_name"`
+	Profiles     []ProfileChoice `json:"profiles"`
+}
+
+// ProfileChoices is what the request dialog offers: whether requesters may
+// choose at all, and the profiles of every server that serves the media type.
+type ProfileChoices struct {
+	Enabled bool                   `json:"enabled"`
+	Servers []ServerProfileChoices `json:"servers"`
 }
 
 type FeatureStatus struct {
@@ -298,6 +329,13 @@ type Request struct {
 	// season's episode counts once the series is in the library.
 	Seasons        []int            `json:"-"`
 	SeasonProgress []SeasonProgress `json:"-"`
+	// QualityProfileID is the Sonarr/Radarr quality profile the requester
+	// picked, when they picked one; the name, the 4K tier it implies and the
+	// connection it belongs to are stored beside it so a submission needs no
+	// second lookup.
+	QualityProfileID           *int   `json:"quality_profile_id,omitempty"`
+	QualityProfileName         string `json:"quality_profile_name,omitempty"`
+	QualityProfileConnectionID string `json:"-"`
 	// Followers are the profiles, other than the requester's, that asked to be
 	// told when the title is available; loaded for the fulfilled notification.
 	Followers []Follower `json:"-"`
@@ -526,6 +564,11 @@ type CreateRequestInput struct {
 	// Source records what created the request; empty means SourceDirect.
 	// Set by the watchlist path, never read from a client body.
 	Source Source `json:"-"`
+	// QualityProfileID is the profile the requester picked; the rest are
+	// filled in from the server when the choice is resolved.
+	QualityProfileID           *int   `json:"-"`
+	QualityProfileName         string `json:"-"`
+	QualityProfileConnectionID string `json:"-"`
 }
 
 // RequestPageKey identifies the last emitted request in descending creation order.

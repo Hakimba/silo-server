@@ -5,11 +5,21 @@ import type { RequestMediaDetail, RequestMediaSeason } from "@/api/types";
 const mocks = vi.hoisted(() => ({
   create: vi.fn(),
   loaded: { data: undefined as RequestMediaDetail | undefined, isFetching: false, isError: false },
+  // Off by default: these cases are about the seasons, and the picker hides.
+  profileOptions: { enabled: false, servers: [] } as {
+    enabled: boolean;
+    servers: {
+      connection_id: string;
+      server_name: string;
+      profiles: { id: number; name: string; default: boolean }[];
+    }[];
+  },
 }));
 
 vi.mock("@/hooks/queries/useRequests", () => ({
   useCreateMediaRequest: () => ({ mutate: mocks.create, isPending: false }),
   useRequestMediaDetail: () => mocks.loaded,
+  useRequestProfileOptions: () => ({ data: mocks.profileOptions }),
 }));
 
 import { RequestSeasonsDialog } from "./RequestSeasonsDialog";
@@ -50,6 +60,32 @@ describe("RequestSeasonsDialog", () => {
   beforeEach(() => {
     mocks.create.mockReset();
     mocks.loaded = { data: undefined, isFetching: false, isError: false };
+  });
+
+  it("sends the quality profile the viewer picked", () => {
+    mocks.profileOptions = {
+      enabled: true,
+      servers: [
+        {
+          connection_id: "c-sonarr",
+          server_name: "Sonarr",
+          profiles: [
+            { id: 3, name: "French HD 1080p", default: true },
+            { id: 4, name: "French 4K Remux", default: false },
+          ],
+        },
+      ],
+    };
+    const dialog = open(series({ seasons: [season(1)] }));
+    fireEvent.change(within(dialog).getByLabelText("Quality profile"), {
+      target: { value: "c-sonarr:4" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Request Season 1" }));
+    expect(mocks.create.mock.calls[0]![0]).toMatchObject({
+      quality_profile_id: 4,
+      quality_profile_connection_id: "c-sonarr",
+    });
+    mocks.profileOptions = { enabled: false, servers: [] };
   });
 
   it("leaves an untouched pick to the server", () => {

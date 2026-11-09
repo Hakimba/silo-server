@@ -26,6 +26,7 @@ vi.mock("@/hooks/queries/useRequests", () => ({
     return mocks.detail;
   },
   useCreateMediaRequest: () => ({ mutate: mocks.create, isPending: false, variables: undefined }),
+  useRequestProfileOptions: () => ({ data: { enabled: false, servers: [] } }),
   useMyMediaRequests: (...args: unknown[]) => {
     mocks.useMyMediaRequests(...args);
     return { data: mocks.mine };

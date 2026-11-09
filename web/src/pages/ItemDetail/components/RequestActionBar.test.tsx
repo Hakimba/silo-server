@@ -39,7 +39,11 @@ vi.mock("@/playback/watchPlaybackContext", () => ({
   useWatchPlaybackController: () => ({ startPlayback: vi.fn() }),
 }));
 vi.mock("./SubtitlesPopover", () => ({ default: () => null }));
-vi.mock("@/hooks/useAuth", () => ({ useAuth: () => ({ user: { id: 1 } }) }));
+// useOptionalAuth serves useCurrentProfile, which the profile picker reads.
+vi.mock("@/hooks/useAuth", () => ({
+  useAuth: () => ({ user: { id: 1 } }),
+  useOptionalAuth: () => ({ user: { id: 1 }, profile: { id: "p-1" } }),
+}));
 vi.mock("sonner", () => ({
   toast: { success: mocks.toastSuccess, error: mocks.toastError },
 }));

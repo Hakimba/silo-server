@@ -42,10 +42,11 @@ func (r *Repository) GetSettings(ctx context.Context) (Settings, error) {
 	var s Settings
 	err := r.pool.QueryRow(ctx, `
 		SELECT requests_enabled, global_max_requests, global_window_days,
-		       global_auto_approval_enabled, force_dual_quality, watchlist_requests, updated_at, revision
+		       global_auto_approval_enabled, force_dual_quality, watchlist_requests,
+		       requester_quality_profiles, requester_quality_profile_allowlist, updated_at, revision
 		FROM request_settings
 		WHERE id = true
-	`).Scan(&s.RequestsEnabled, &s.GlobalMaxRequests, &s.GlobalWindowDays, &s.GlobalAutoApprovalEnabled, &s.ForceDualQuality, &s.WatchlistRequests, &s.UpdatedAt, &s.Revision)
+	`).Scan(&s.RequestsEnabled, &s.GlobalMaxRequests, &s.GlobalWindowDays, &s.GlobalAutoApprovalEnabled, &s.ForceDualQuality, &s.WatchlistRequests, &s.RequesterQualityProfiles, &s.RequesterQualityProfileAllowlist, &s.UpdatedAt, &s.Revision)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return Settings{
@@ -64,13 +65,13 @@ func (r *Repository) GetSettings(ctx context.Context) (Settings, error) {
 // UpdateSettings is the v1 settings write. The frozen v1 body does not carry
 // watchlist_requests, so the stored value is kept.
 func (r *Repository) UpdateSettings(ctx context.Context, settings Settings) (Settings, error) {
-	return r.updateSettings(ctx, r.pool, settings, -1, nil)
+	return r.updateSettings(ctx, r.pool, settings, -1, nil, nil, nil)
 }
 
 // updateSettings writes the settings row when its revision still equals
 // expected (-1 skips the check). A nil watchlist keeps the stored
 // watchlist_requests value, true on a first write.
-func (r *Repository) updateSettings(ctx context.Context, exec requestExecutor, settings Settings, expected int64, watchlist *bool) (Settings, error) {
+func (r *Repository) updateSettings(ctx context.Context, exec requestExecutor, settings Settings, expected int64, watchlist *bool, requesterProfiles *bool, allowlist *[]string) (Settings, error) {
 	if settings.GlobalWindowDays <= 0 {
 		settings.GlobalWindowDays = 7
 	}
@@ -82,9 +83,10 @@ func (r *Repository) updateSettings(ctx context.Context, exec requestExecutor, s
 	err := exec.QueryRow(ctx, `
 		INSERT INTO request_settings (
 			id, requests_enabled, global_max_requests, global_window_days,
-			global_auto_approval_enabled, force_dual_quality, watchlist_requests, updated_at
+			global_auto_approval_enabled, force_dual_quality, watchlist_requests,
+			requester_quality_profiles, requester_quality_profile_allowlist, updated_at
 		)
-		VALUES (true, $1, $2, $3, $4, $5, COALESCE($7::boolean, true), now())
+		VALUES (true, $1, $2, $3, $4, $5, COALESCE($7::boolean, true), COALESCE($8::boolean, false), COALESCE($9::text[], '{}'), now())
 		ON CONFLICT (id) DO UPDATE SET
 			requests_enabled = EXCLUDED.requests_enabled,
 			global_max_requests = EXCLUDED.global_max_requests,
@@ -92,12 +94,15 @@ func (r *Repository) updateSettings(ctx context.Context, exec requestExecutor, s
 			global_auto_approval_enabled = EXCLUDED.global_auto_approval_enabled,
 			force_dual_quality = EXCLUDED.force_dual_quality,
 			watchlist_requests = COALESCE($7::boolean, request_settings.watchlist_requests),
+			requester_quality_profiles = COALESCE($8::boolean, request_settings.requester_quality_profiles),
+			requester_quality_profile_allowlist = COALESCE($9::text[], request_settings.requester_quality_profile_allowlist),
 			updated_at = now()
 		WHERE $6::bigint = -1 OR request_settings.revision = $6
 		RETURNING requests_enabled, global_max_requests, global_window_days,
-		          global_auto_approval_enabled, force_dual_quality, watchlist_requests, updated_at, revision
-	`, settings.RequestsEnabled, settings.GlobalMaxRequests, settings.GlobalWindowDays, settings.GlobalAutoApprovalEnabled, settings.ForceDualQuality, expected, watchlist).
-		Scan(&s.RequestsEnabled, &s.GlobalMaxRequests, &s.GlobalWindowDays, &s.GlobalAutoApprovalEnabled, &s.ForceDualQuality, &s.WatchlistRequests, &s.UpdatedAt, &s.Revision)
+		          global_auto_approval_enabled, force_dual_quality, watchlist_requests,
+		          requester_quality_profiles, requester_quality_profile_allowlist, updated_at, revision
+	`, settings.RequestsEnabled, settings.GlobalMaxRequests, settings.GlobalWindowDays, settings.GlobalAutoApprovalEnabled, settings.ForceDualQuality, expected, watchlist, requesterProfiles, allowlist).
+		Scan(&s.RequestsEnabled, &s.GlobalMaxRequests, &s.GlobalWindowDays, &s.GlobalAutoApprovalEnabled, &s.ForceDualQuality, &s.WatchlistRequests, &s.RequesterQualityProfiles, &s.RequesterQualityProfileAllowlist, &s.UpdatedAt, &s.Revision)
 	if err != nil {
 		return Settings{}, fmt.Errorf("update request settings: %w", err)
 	}
@@ -367,6 +372,10 @@ func (r *Repository) insertRequest(
 	if input.Input.Year != nil {
 		year = *input.Input.Year
 	}
+	var profileIDArg any
+	if input.Input.QualityProfileID != nil {
+		profileIDArg = *input.Input.QualityProfileID
+	}
 	facts, err := encodeRoutingFacts(input.Facts)
 	if err != nil {
 		return nil, err
@@ -376,20 +385,24 @@ func (r *Repository) insertRequest(
 			id, provider, media_type, tmdb_id, tvdb_id, imdb_id, title, year,
 			overview, poster_path, backdrop_path, status, outcome,
 			requested_by_user_id, requested_by_profile_id, is_anime, created_at, updated_at, approved_at,
-			routing_facts, seasons, source
+			routing_facts, seasons, source,
+			quality_profile_id, quality_profile_name, quality_profile_connection_id
 		)
 		VALUES (
 			$1, 'tmdb', $2, $3, $4, $5, $6, $7,
 			$8, $9, $10, $11, $12,
 			$13, $14, $15, $16, $16, $17,
-			$18, $19, $20
+			$18, $19, $20,
+			$21, $22, $23
 		)
 		RETURNING `+requestColumns(), input.ID, input.Input.MediaType, input.Input.TMDBID, tvdbID,
 		strings.TrimSpace(input.Input.IMDbID), strings.TrimSpace(input.Input.Title), year,
 		strings.TrimSpace(input.Input.Overview), strings.TrimSpace(input.Input.PosterPath),
 		strings.TrimSpace(input.Input.BackdropPath), status, outcome,
 		input.Requester.UserID, input.Requester.ProfileID, input.IsAnime, now, approvedAt,
-		facts, nonNilSeasons(input.Input.Seasons), requestSource(input.Input.Source))
+		facts, nonNilSeasons(input.Input.Seasons), requestSource(input.Input.Source),
+		profileIDArg, strings.TrimSpace(input.Input.QualityProfileName),
+		strings.TrimSpace(input.Input.QualityProfileConnectionID))
 	req, err := scanRequest(row)
 	if err != nil {
 		return nil, fmt.Errorf("insert request: %w", err)
@@ -1482,7 +1495,8 @@ func requestColumns() string {
 	        overview, poster_path, backdrop_path, status, outcome,
 	        requested_by_user_id, requested_by_profile_id, is_anime,
 	        last_error, created_at, updated_at, approved_at, completed_at,
-	        submit_attempts, submit_lease_until, next_submit_at, outcome_reason, routing_facts, seasons, source`
+	        submit_attempts, submit_lease_until, next_submit_at, outcome_reason, routing_facts, seasons, source,
+	        quality_profile_id, quality_profile_name, quality_profile_connection_id`
 }
 
 type requestScanner interface {
@@ -1493,6 +1507,7 @@ func scanRequest(row requestScanner) (*Request, error) {
 	var req Request
 	var tvdbID, year sql.NullInt64
 	var approvedAt, completedAt, submitLeaseUntil, nextSubmitAt sql.NullTime
+	var qualityProfileID sql.NullInt64
 	var rawFacts []byte
 	if err := row.Scan(
 		&req.ID,
@@ -1523,6 +1538,9 @@ func scanRequest(row requestScanner) (*Request, error) {
 		&rawFacts,
 		&req.Seasons,
 		&req.Source,
+		&qualityProfileID,
+		&req.QualityProfileName,
+		&req.QualityProfileConnectionID,
 	); err != nil {
 		return nil, err
 	}
@@ -1538,6 +1556,10 @@ func scanRequest(row requestScanner) (*Request, error) {
 	if year.Valid {
 		v := int(year.Int64)
 		req.Year = &v
+	}
+	if qualityProfileID.Valid {
+		v := int(qualityProfileID.Int64)
+		req.QualityProfileID = &v
 	}
 	if approvedAt.Valid {
 		req.ApprovedAt = &approvedAt.Time

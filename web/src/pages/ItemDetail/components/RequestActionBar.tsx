@@ -17,12 +17,15 @@ import type { MediaRequest, RequestMediaDetail } from "@/api/types";
 import { CancelRequestDialog } from "@/components/CancelRequestDialog";
 import { RequestDownloadProgress } from "@/components/RequestDownloadProgress";
 import { RequestSeasonsDialog } from "@/components/RequestSeasonsDialog";
+import RequestMovieDialog from "@/components/RequestMovieDialog";
+import { qualityPickerAvailable } from "@/components/RequestQualityPicker";
 import {
   useCancelMediaRequest,
   useCreateMediaRequest,
   useMediaRequest,
   useMyMediaRequests,
   useRequestFeatureStatus,
+  useRequestProfileOptions,
   useToggleRequestFollow,
 } from "@/hooks/queries/useRequests";
 import { useToggleWatchlistTitle } from "@/hooks/queries/watchlistTitles";
@@ -82,8 +85,13 @@ export default function RequestActionBar({ item, libraryHref }: RequestActionBar
   const ownRequest = useOwnCancellableRequest(item);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [pickSeasons, setPickSeasons] = useState(false);
+  const [pickQuality, setPickQuality] = useState(false);
   // A series TMDB lists seasons for is requested season by season.
   const seasonPicker = item.media_type === "series" && (item.seasons?.length ?? 0) > 0;
+  // A server that lets requesters pick a quality profile, and has more than
+  // one, asks before submitting. Read only where a request could be made.
+  const profileOptions = useRequestProfileOptions(item.media_type, item.request.requestable);
+  const qualityPicker = !seasonPicker && qualityPickerAvailable(profileOptions.data);
 
   const state = requestDisplayState(item.request.status, undefined, item.request.state);
   const inLibrary =
@@ -105,7 +113,9 @@ export default function RequestActionBar({ item, libraryHref }: RequestActionBar
       pending: createRequest.isPending,
       onClick: seasonPicker
         ? () => setPickSeasons(true)
-        : () => createRequest.mutate(requestInputFromMediaResult(item)),
+        : qualityPicker
+          ? () => setPickQuality(true)
+          : () => createRequest.mutate(requestInputFromMediaResult(item)),
     };
   } else if (inLibrary) {
     primaryAction = libraryHref
@@ -212,6 +222,9 @@ export default function RequestActionBar({ item, libraryHref }: RequestActionBar
           isPending={cancelRequest.isPending}
         />
       ) : null}
+      {qualityPicker ? (
+        <RequestMovieDialog open={pickQuality} onOpenChange={setPickQuality} item={item} />
+      ) : null}
       {seasonPicker ? (
         <RequestSeasonsDialog
           open={pickSeasons}
@@ -219,6 +232,7 @@ export default function RequestActionBar({ item, libraryHref }: RequestActionBar
           tmdbID={item.tmdb_id}
           title={item.title}
           detail={item}
+          profileOptionsLoadingEnabled={item.request.requestable}
         />
       ) : null}
     </>
