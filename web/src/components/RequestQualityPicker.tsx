@@ -117,8 +117,8 @@ export default function RequestQualityPicker({
         ))}
       </select>
       <p className="text-muted-foreground text-xs">
-        The server downloads with this profile for your request only; its own default stays as
-        it is.
+        The server downloads with this profile for your request only; its own default stays as it
+        is.
       </p>
     </div>
   );
