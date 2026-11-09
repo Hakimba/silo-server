@@ -393,7 +393,7 @@ func (r *Repository) insertRequest(
 			$8, $9, $10, $11, $12,
 			$13, $14, $15, $16, $16, $17,
 			$18, $19, $20,
-			$21, $22, $23, $24
+			$21, $22, $23
 		)
 		RETURNING `+requestColumns(), input.ID, input.Input.MediaType, input.Input.TMDBID, tvdbID,
 		strings.TrimSpace(input.Input.IMDbID), strings.TrimSpace(input.Input.Title), year,
