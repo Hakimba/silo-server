@@ -4,5 +4,7 @@
   "global_window_days": 7,
   "global_auto_approval_enabled": false,
   "force_dual_quality": false,
-  "watchlist_requests": false
+  "watchlist_requests": false,
+  "requester_quality_profiles": false,
+  "requester_quality_profile_allowlist": []
 }
