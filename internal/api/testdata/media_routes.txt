@@ -853,6 +853,7 @@ GET /api/v2/requests/discover/{section}	non-media
 DELETE /api/v2/requests/follows/{media_type}/{tmdb_id}	non-media
 PUT /api/v2/requests/follows/{media_type}/{tmdb_id}	non-media
 GET /api/v2/requests/mine	non-media
+GET /api/v2/requests/profile-options	non-media
 GET /api/v2/requests/search	non-media
 GET /api/v2/requests/status	non-media
 DELETE /api/v2/requests/{id}	non-media
@@ -2208,6 +2209,7 @@ GET /api/v2/requests/discover/{section}	non-media
 DELETE /api/v2/requests/follows/{media_type}/{tmdb_id}	non-media
 PUT /api/v2/requests/follows/{media_type}/{tmdb_id}	non-media
 GET /api/v2/requests/mine	non-media
+GET /api/v2/requests/profile-options	non-media
 GET /api/v2/requests/search	non-media
 GET /api/v2/requests/status	non-media
 DELETE /api/v2/requests/{id}	non-media
