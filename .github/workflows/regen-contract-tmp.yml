@@ -42,7 +42,7 @@ jobs:
         run: |
           git config user.name "hermes-agent"
           git config user.email "agent@hermes.local"
-          git add contracts/api/v2/openapi.json web/src/api/v2/schema.ts
+          git add contracts/api/v2/openapi.json web/src/api/v2/schema.ts web/src/api/v2/operations.ts
           if git diff --cached --quiet; then
             echo "contract already up to date"
           else

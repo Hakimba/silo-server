@@ -60,7 +60,7 @@ type AdminRequestSettings struct {
 	WatchlistRequests *bool `json:"watchlist_requests,omitempty" doc:"Adding a title that is not in the library to a watchlist also requests it; absent on update keeps the stored value" example:"true"`
 	// RequesterQualityProfiles and its allowlist are optional on update for
 	// the same reason as WatchlistRequests.
-	RequesterQualityProfiles *bool `json:"requester_quality_profiles,omitempty" doc:"Let requesters pick the Sonarr/Radarr quality profile their request downloads with; absent on update keeps the stored value" example:"true"`
+	RequesterQualityProfiles         *bool     `json:"requester_quality_profiles,omitempty" doc:"Let requesters pick the Sonarr/Radarr quality profile their request downloads with; absent on update keeps the stored value" example:"true"`
 	RequesterQualityProfileAllowlist *[]string `json:"requester_quality_profile_allowlist,omitempty" doc:"Profiles the picker offers, each \"connection-id:profile-id\"; empty offers every profile the requester's playback ceiling allows. Absent on update keeps the stored value" example:"[\"c-1:4\"]"`
 }
 type AdminRequestSettingsOutput struct {

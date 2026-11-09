@@ -45,6 +45,9 @@ type RequestService interface {
 	UpdateIntegration(ctx context.Context, viewer mediarequests.Viewer, integration mediarequests.Integration) (*mediarequests.Integration, error)
 	DeleteIntegration(ctx context.Context, viewer mediarequests.Viewer, id string) error
 	LoadIntegrationOptions(ctx context.Context, viewer mediarequests.Viewer, integration mediarequests.Integration) (map[string][]mediarequests.RouterOption, error)
+	// RequesterProfileChoices backs the v2 quality profile picker; v1 has no
+	// route for it, but this interface is what v2 receives.
+	RequesterProfileChoices(ctx context.Context, viewer mediarequests.Viewer, mediaType mediarequests.MediaType) (mediarequests.ProfileChoices, error)
 
 	ListStudios(ctx context.Context, viewer mediarequests.Viewer) ([]mediarequests.DiscoverBrandCard, error)
 	ListNetworks(ctx context.Context, viewer mediarequests.Viewer) ([]mediarequests.DiscoverBrandCard, error)

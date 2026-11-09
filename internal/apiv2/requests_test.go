@@ -21,6 +21,8 @@ type fakeRequests struct {
 	err      error
 	// detailDownload is the download progress GetDetail reports.
 	detailDownload *mediarequests.DownloadProgress
+	// profileChoices is what RequesterProfileChoices offers.
+	profileChoices mediarequests.ProfileChoices
 
 	lastViewer mediarequests.Viewer
 	lastFilter mediarequests.ListFilter
@@ -97,6 +99,15 @@ func (f *fakeRequests) GetDetail(_ context.Context, viewer mediarequests.Viewer,
 		Recommendations: []mediarequests.MediaResult{fixtureResult(950)}, Availability: mediarequests.AvailabilityAvailable,
 		LibraryContentID: "movie:heat-1995", Request: mediarequests.RequestState{Reason: "already_available", Download: f.detailDownload},
 	}, nil
+}
+
+// RequesterProfileChoices answers the picker's read. profileChoices, when set,
+// is what the server would offer.
+func (f *fakeRequests) RequesterProfileChoices(_ context.Context, _ mediarequests.Viewer, _ mediarequests.MediaType) (mediarequests.ProfileChoices, error) {
+	if f.err != nil {
+		return mediarequests.ProfileChoices{}, f.err
+	}
+	return f.profileChoices, nil
 }
 
 func (f *fakeRequests) CreateRequest(_ context.Context, viewer mediarequests.Viewer, input mediarequests.CreateRequestInput) (*mediarequests.Request, error) {
