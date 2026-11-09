@@ -22,6 +22,8 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: "1.26.4"
+      - name: Install the CGO dependencies
+        run: sudo apt-get update && sudo apt-get install -y libvips-dev
       - name: Generate the OpenAPI artifact
         run: go run ./cmd/apiv2-openapi -out contracts/api/v2/openapi.json
       - uses: pnpm/action-setup@v4
