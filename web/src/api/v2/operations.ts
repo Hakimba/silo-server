@@ -510,6 +510,7 @@ export const v2Operations = {
   "GET /api/v2/requests/discover/studios": "listDiscoverStudios",
   "GET /api/v2/requests/discover/{section}": "getDiscoverSection",
   "GET /api/v2/requests/mine": "listMyRequests",
+  "GET /api/v2/requests/profile-options": "getRequestProfileOptions",
   "GET /api/v2/requests/search": "searchRequestMedia",
   "GET /api/v2/requests/status": "getRequestStatus",
   "GET /api/v2/requests/{id}": "getRequest",
