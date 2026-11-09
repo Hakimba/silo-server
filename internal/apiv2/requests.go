@@ -227,6 +227,9 @@ type MediaRequest struct {
 	SeasonProgress       []RequestSeasonProgress `json:"season_progress" doc:"Series season requests: each requested season's episodes, once the series is in the library; empty otherwise"`
 	OutcomeReason        string                  `json:"outcome_reason,omitempty" doc:"Why the request was declined or withdrawn, when a reason was given"`
 	Source               string                  `json:"source" doc:"What created the request: direct (the Request button or an API create) or watchlist (adding a title that is not in the library to a watchlist); more values may be added" example:"direct"`
+	QualityProfileID     *int                    `json:"quality_profile_id,omitempty" doc:"The Sonarr/Radarr quality profile the requester picked; absent when the server's own profile is used" example:"4"`
+	QualityProfileName   string                  `json:"quality_profile_name,omitempty" doc:"That profile's name when the request was made, for display after the profile is renamed or deleted" example:"French HD 1080p"`
+	QualityProfile4K     bool                    `json:"quality_profile_4k,omitempty" doc:"The picked profile allows 2160p, so the request also asks for the 4K copy" example:"false"`
 	RequestedByUserID    ID                      `json:"requested_by_user_id,omitempty" example:"1"`
 	RequestedByProfileID ID                      `json:"requested_by_profile_id,omitempty" example:"p-owner"`
 	IntegrationKind      string                  `json:"integration_kind,omitempty" doc:"Admins only: the download server's kind" example:"radarr"`
@@ -266,6 +269,44 @@ type MediaRequestCreate struct {
 	PosterPath   string `json:"poster_path,omitempty" doc:"TMDB image path"`
 	BackdropPath string `json:"backdrop_path,omitempty" doc:"TMDB image path"`
 	Seasons      []int  `json:"seasons,omitempty" maxItems:"200" doc:"Series only: the season numbers to request, starting at 1 (a season below 1 is refused). Omitted: every aired season not yet complete in the library" example:"[2,3]"`
+	// QualityProfileID is the profile from getRequestProfileOptions the
+	// requester picked. Omitted: the server's own profile, as before.
+	QualityProfileID *int `json:"quality_profile_id,omitempty" minimum:"1" doc:"Quality profile to download with, from getRequestProfileOptions. A 4K profile also asks for the 1080 copy; any other profile keeps the download HD only. Omitted: the server's configured profile" example:"4"`
+	// QualityProfileConnectionID names the server the profile belongs to,
+	// needed only when two servers publish the same profile id.
+	QualityProfileConnectionID string `json:"quality_profile_connection_id,omitempty" doc:"The download server the profile belongs to, from getRequestProfileOptions; only needed when two servers share a profile id"`
+}
+
+// RequestProfileOptionsInput is the getRequestProfileOptions query.
+type RequestProfileOptionsInput struct {
+	MediaType string `query:"media_type" required:"true" enum:"movie,series" doc:"Which request's profiles to list: movies come from Radarr, series from Sonarr" example:"movie"`
+}
+
+// RequestProfileOption is one quality profile a requester may pick.
+type RequestProfileOption struct {
+	ID      int    `json:"id" example:"4"`
+	Name    string `json:"name" example:"French HD 1080p"`
+	Is4K    bool   `json:"is_4k" doc:"The profile allows 2160p, so picking it asks for a 4K copy as well as the 1080 one" example:"false"`
+	Default bool   `json:"default" doc:"The profile the server downloads with when the requester picks nothing" example:"true"`
+}
+
+// RequestProfileServer is one download server's offer.
+type RequestProfileServer struct {
+	ConnectionID string                 `json:"connection_id" doc:"Send as quality_profile_connection_id when two servers share a profile id" example:"c-9f2"`
+	ServerName   string                 `json:"server_name" example:"Radarr"`
+	Profiles     []RequestProfileOption `json:"profiles"`
+}
+
+// RequestProfileOptionsOutput lists what a request may download with.
+type RequestProfileOptionsOutput struct {
+	Body RequestProfileOptions
+}
+
+// RequestProfileOptions is the profile picker's data. Enabled is false when
+// the admin has not let requesters choose, or no server answered.
+type RequestProfileOptions struct {
+	Enabled bool                   `json:"enabled" example:"true"`
+	Servers []RequestProfileServer `json:"servers"`
 }
 
 // MediaRequestCreateInput is the createRequest request.
@@ -378,7 +419,10 @@ const (
 	opUnfollowRequestMedia  = "unfollowRequestMedia"
 )
 
-const requestsTag = "requests"
+const (
+	requestsTag             = "requests"
+	opRequestProfileOptions = "getRequestProfileOptions"
+)
 
 func registerRequests(reg *Registry) {
 	cursors := NewCursors(reg.deps.CursorSecret)
@@ -390,6 +434,11 @@ func registerRequests(reg *Registry) {
 	// has an active request (409) and a requester over quota (429).
 	create.Errors = []int{http.StatusConflict, http.StatusTooManyRequests}
 	Register(reg, Operation{Operation: create, Class: ClassProfileScoped, DemoRestricted: isMutatingMethod(create.Method), ServiceBacked: true, RetrySafety: RetrySafetyNonRetryable}, reg.createRequest)
+
+	profiles := humaOp(http.MethodGet, Prefix+"/requests/profile-options", opRequestProfileOptions, requestsTag,
+		"List the quality profiles a request may download with, and whether requesters may choose one.")
+	profiles.Errors = []int{http.StatusConflict}
+	Register(reg, Operation{Operation: profiles, Class: ClassProfileScoped, ServiceBacked: true}, reg.getRequestProfileOptions)
 
 	Register(reg, Operation{
 		Operation: humaOp(http.MethodGet, Prefix+"/requests/mine", opListMyRequests, requestsTag,
@@ -523,11 +572,39 @@ func (reg *Registry) createRequest(ctx context.Context, in *MediaRequestCreateIn
 		PosterPath:   in.Body.PosterPath,
 		BackdropPath: in.Body.BackdropPath,
 		Seasons:      in.Body.Seasons,
+		QualityProfileID:           in.Body.QualityProfileID,
+		QualityProfileConnectionID: in.Body.QualityProfileConnectionID,
 	})
 	if err != nil {
 		return nil, requestProblem(err)
 	}
 	return &MediaRequestOutput{Body: mediaRequestOf(req, viewer)}, nil
+}
+
+// getRequestProfileOptions lists the quality profiles the viewer's requests may
+// download with: the Radarr ones for a movie, the Sonarr ones for a series.
+func (reg *Registry) getRequestProfileOptions(ctx context.Context, in *RequestProfileOptionsInput) (*RequestProfileOptionsOutput, error) {
+	svc, viewer, p := reg.requestViewer(ctx)
+	if p != nil {
+		return nil, p
+	}
+	choices, err := svc.RequesterProfileChoices(ctx, viewer, mediarequests.MediaType(in.MediaType))
+	if err != nil {
+		return nil, requestProblem(err)
+	}
+	out := RequestProfileOptions{Enabled: choices.Enabled, Servers: make([]RequestProfileServer, 0, len(choices.Servers))}
+	for _, server := range choices.Servers {
+		profiles := make([]RequestProfileOption, 0, len(server.Profiles))
+		for _, profile := range server.Profiles {
+			profiles = append(profiles, RequestProfileOption{
+				ID: profile.ID, Name: profile.Name, Is4K: profile.Is4K, Default: profile.Default,
+			})
+		}
+		out.Servers = append(out.Servers, RequestProfileServer{
+			ConnectionID: server.ConnectionID, ServerName: server.ServerName, Profiles: profiles,
+		})
+	}
+	return &RequestProfileOptionsOutput{Body: out}, nil
 }
 
 // listMyRequests pages by the last emitted creation time and unique request ID.
@@ -844,6 +921,9 @@ func mediaRequestOf(r *mediarequests.Request, viewer mediarequests.Viewer) Media
 		SeasonProgress:   requestSeasonProgressOf(r.SeasonProgress),
 		OutcomeReason:    r.OutcomeReason,
 		Source:           string(requestSourceOf(r.Source)),
+		QualityProfileID: r.QualityProfileID,
+		QualityProfileName: r.QualityProfileName,
+		QualityProfile4K: r.QualityProfile4K,
 		IsAnime:          r.IsAnime,
 		Targets:          make([]RequestTarget, 0, len(r.Targets)),
 		LibraryContentID: r.LibraryContentID,

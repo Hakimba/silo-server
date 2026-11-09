@@ -12,6 +12,7 @@ import type {
   RequestMediaPage,
   RequestMediaResult,
   RequestMediaType,
+  RequestProfileOptions,
   RequestSearchMediaType,
   RequestTarget,
   RequestUserState,
@@ -46,6 +47,18 @@ export function mediaRequestFromV2(r: Schemas["MediaRequest"]): MediaRequest {
       : {}),
     targets: targets.map(requestTargetFromV2),
   };
+}
+
+// The profile picker's data. The server answers the profiles the viewer may
+// pick for a media type, or enabled: false when requesters cannot choose.
+export function getRequestProfileOptionsV2(
+  mediaType: RequestMediaType,
+  signal?: AbortSignal,
+): Promise<RequestProfileOptions> {
+  return v2("GET /api/v2/requests/profile-options", {
+    query: { media_type: mediaType },
+    signal,
+  }).then((r) => r as RequestProfileOptions);
 }
 
 export function createMediaRequestV2(body: V2Body<"POST /api/v2/requests">): Promise<MediaRequest> {

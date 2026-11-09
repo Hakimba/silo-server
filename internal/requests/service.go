@@ -335,6 +335,17 @@ func (s *Service) filterPageByCeiling(ctx context.Context, raw *tmdb.MediaPage, 
 func (s *Service) allowedQualities(ctx context.Context, req Request, settings Settings) (qualities []Quality, resolved bool) {
 	out := []Quality{Quality1080p}
 	ceiling, resolved := s.requesterCeiling(ctx, req.RequestedByUserID, req.RequestedByProfileID)
+	// A request the requester picked a profile for follows that pick: a 4K
+	// profile asks for the 4K copy as well, and any other profile keeps the
+	// download HD only, whatever the requester's ceiling would otherwise
+	// allow. resolveRequesterQualityProfile has already refused a 4K pick from
+	// a requester who may not play 4K.
+	if req.QualityProfileID != nil {
+		if req.QualityProfile4K {
+			out = append(out, Quality2160p)
+		}
+		return out, resolved
+	}
 	// QualityAllowed treats an empty ceiling as "no cap" (the "Any" preset), so a
 	// requester with unlimited playback quality correctly gets 4K. A raw
 	// CompareQuality would rank "" as the LOWEST quality and wrongly drop 4K.
@@ -775,6 +786,9 @@ func (s *Service) CreateRequest(ctx context.Context, viewer Viewer, input Create
 	}
 	normalized, err := normalizeCreateInput(input)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.resolveRequesterQualityProfile(ctx, viewer, &normalized); err != nil {
 		return nil, err
 	}
 	if err := s.ensureCreateAllowedByCeiling(ctx, viewer, normalized); err != nil {
@@ -2262,6 +2276,10 @@ func (s *Service) submitClaimed(ctx context.Context, req Request, actor Viewer, 
 		return done, err
 	}
 	s.populateRequesterIdentity(ctx, &req)
+	// A requester's quality profile replaces the server's own on the tier it
+	// governs: a 4K pick on the 4K copy, any other pick on the HD copy.
+	conns = applyRequesterProfile(req, conns, Quality1080p)
+	conns = applyRequesterProfile(req, conns, Quality2160p)
 	targets, msg, err := s.router.Fulfill(ctx, installationID, capabilityID, req, plan.want, conns)
 	if err != nil {
 		return nil, err
@@ -2339,6 +2357,10 @@ func (s *Service) submitRouted(ctx context.Context, req Request, actor Viewer, f
 			}
 		}
 		maps.Copy(connKind, connectionKindByID([]ResolvedRouterConnection{conn}))
+		// The requester's pick governs the tier it names, and only that one.
+		if tierConns := applyRequesterProfile(req, []ResolvedRouterConnection{conn}, q); len(tierConns) == 1 {
+			conn = tierConns[0]
+		}
 		got, msg, err := s.router.Fulfill(ctx, installationID, capabilityID, req, []Quality{q}, []ResolvedRouterConnection{conn})
 		if err != nil {
 			if len(targets) == 0 {
