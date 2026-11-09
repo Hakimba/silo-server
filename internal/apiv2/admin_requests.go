@@ -58,6 +58,10 @@ type AdminRequestSettings struct {
 	// WatchlistRequests is optional on update so a client that predates it
 	// keeps the stored value; responses always carry it.
 	WatchlistRequests *bool `json:"watchlist_requests,omitempty" doc:"Adding a title that is not in the library to a watchlist also requests it; absent on update keeps the stored value" example:"true"`
+	// RequesterQualityProfiles and its allowlist are optional on update for
+	// the same reason as WatchlistRequests.
+	RequesterQualityProfiles         *bool     `json:"requester_quality_profiles,omitempty" doc:"Let requesters pick the Sonarr/Radarr quality profile their request downloads with; absent on update keeps the stored value" example:"true"`
+	RequesterQualityProfileAllowlist *[]string `json:"requester_quality_profile_allowlist,omitempty" doc:"Profiles the picker offers, each \"connection-id:profile-id\"; empty offers every profile the requester's playback ceiling allows. Absent on update keeps the stored value" example:"[\"c-1:4\"]"`
 }
 type AdminRequestSettingsOutput struct {
 	ETag string `header:"ETag"`
@@ -321,13 +325,20 @@ func (reg *Registry) listAdminRequests(ctx context.Context, cursors *Cursors, in
 }
 func adminSettingsOf(s mediarequests.Settings) AdminRequestSettings {
 	watchlist := s.WatchlistRequests
+	profiles := s.RequesterQualityProfiles
+	allowlist := s.RequesterQualityProfileAllowlist
+	if allowlist == nil {
+		allowlist = []string{}
+	}
 	return AdminRequestSettings{
-		RequestsEnabled:           s.RequestsEnabled,
-		GlobalMaxRequests:         s.GlobalMaxRequests,
-		GlobalWindowDays:          s.GlobalWindowDays,
-		GlobalAutoApprovalEnabled: s.GlobalAutoApprovalEnabled,
-		ForceDualQuality:          s.ForceDualQuality,
-		WatchlistRequests:         &watchlist,
+		RequestsEnabled:                  s.RequestsEnabled,
+		GlobalMaxRequests:                s.GlobalMaxRequests,
+		GlobalWindowDays:                 s.GlobalWindowDays,
+		GlobalAutoApprovalEnabled:        s.GlobalAutoApprovalEnabled,
+		ForceDualQuality:                 s.ForceDualQuality,
+		WatchlistRequests:                &watchlist,
+		RequesterQualityProfiles:         &profiles,
+		RequesterQualityProfileAllowlist: &allowlist,
 	}
 }
 
@@ -337,7 +348,15 @@ func (b AdminRequestSettings) domain(current mediarequests.Settings) mediareques
 	if b.WatchlistRequests != nil {
 		watchlist = *b.WatchlistRequests
 	}
-	return mediarequests.Settings{RequestsEnabled: b.RequestsEnabled, GlobalMaxRequests: b.GlobalMaxRequests, GlobalWindowDays: b.GlobalWindowDays, GlobalAutoApprovalEnabled: b.GlobalAutoApprovalEnabled, ForceDualQuality: b.ForceDualQuality, WatchlistRequests: watchlist}
+	profiles := current.RequesterQualityProfiles
+	if b.RequesterQualityProfiles != nil {
+		profiles = *b.RequesterQualityProfiles
+	}
+	allowlist := current.RequesterQualityProfileAllowlist
+	if b.RequesterQualityProfileAllowlist != nil {
+		allowlist = *b.RequesterQualityProfileAllowlist
+	}
+	return mediarequests.Settings{RequestsEnabled: b.RequestsEnabled, GlobalMaxRequests: b.GlobalMaxRequests, GlobalWindowDays: b.GlobalWindowDays, GlobalAutoApprovalEnabled: b.GlobalAutoApprovalEnabled, ForceDualQuality: b.ForceDualQuality, WatchlistRequests: watchlist, RequesterQualityProfiles: profiles, RequesterQualityProfileAllowlist: allowlist}
 }
 func (reg *Registry) getAdminRequestSettings(ctx context.Context, _ *struct{}) (*AdminRequestSettingsOutput, error) {
 	s, p := reg.adminRequestService()

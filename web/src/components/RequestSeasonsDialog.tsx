@@ -11,7 +11,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
-import { useCreateMediaRequest, useRequestMediaDetail } from "@/hooks/queries/useRequests";
+import RequestQualityPicker, { type QualityProfileChoice } from "@/components/RequestQualityPicker";
+import {
+  useCreateMediaRequest,
+  useRequestMediaDetail,
+  useRequestProfileOptions,
+} from "@/hooks/queries/useRequests";
 import {
   defaultRequestSeasons,
   formatRequestReason,
@@ -33,6 +38,8 @@ interface RequestSeasonsDialogProps {
   title: string;
   /** The series' request detail when the caller has it; otherwise the dialog loads it when opened. */
   detail?: RequestMediaDetail;
+  /** Whether the quality profile list may be read while the dialog is open. */
+  profileOptionsLoadingEnabled?: boolean;
 }
 
 /**
@@ -48,6 +55,7 @@ export function RequestSeasonsDialog({
   tmdbID,
   title,
   detail: givenDetail,
+  profileOptionsLoadingEnabled = true,
 }: RequestSeasonsDialogProps) {
   const loaded = useRequestMediaDetail("series", tmdbID, { enabled: open && !givenDetail });
   const detail = givenDetail ?? loaded.data;
@@ -58,6 +66,8 @@ export function RequestSeasonsDialog({
   const createRequest = useCreateMediaRequest();
   // null keeps the default pick, so it follows the detail as it loads.
   const [picked, setPicked] = useState<number[] | null>(null);
+  const profileOptions = useRequestProfileOptions("series", open && profileOptionsLoadingEnabled);
+  const [profileChoice, setProfileChoice] = useState<QualityProfileChoice | null>(null);
 
   const seasons = detail?.seasons ?? [];
   const requestable = detail?.request.requestable ?? false;
@@ -78,7 +88,10 @@ export function RequestSeasonsDialog({
   const upcoming = upcomingRequestSeasons(choices);
 
   const close = (next: boolean) => {
-    if (!next) setPicked(null);
+    if (!next) {
+      setPicked(null);
+      setProfileChoice(null);
+    }
     onOpenChange(next);
   };
   const toggle = (season: number, on: boolean) =>
@@ -88,7 +101,16 @@ export function RequestSeasonsDialog({
   const submit = () => {
     if (!detail) return;
     createRequest.mutate(
-      { ...requestInputFromMediaResult(detail), ...(!serverChooses && { seasons: selected }) },
+      {
+        ...requestInputFromMediaResult(detail),
+        ...(!serverChooses && { seasons: selected }),
+        ...(profileChoice
+          ? {
+              quality_profile_id: profileChoice.profileId,
+              quality_profile_connection_id: profileChoice.connectionId,
+            }
+          : {}),
+      },
       { onSuccess: () => close(false) },
     );
   };
@@ -194,6 +216,13 @@ export function RequestSeasonsDialog({
             </div>
           </>
         )}
+
+        <RequestQualityPicker
+          options={profileOptions.data}
+          value={profileChoice}
+          onChange={setProfileChoice}
+          disabled={createRequest.isPending}
+        />
 
         <DialogFooter>
           <Button variant="outline" onClick={() => close(false)}>

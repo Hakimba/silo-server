@@ -777,6 +777,9 @@ func (s *Service) CreateRequest(ctx context.Context, viewer Viewer, input Create
 	if err != nil {
 		return nil, err
 	}
+	if err := s.resolveRequesterQualityProfile(ctx, viewer, &normalized); err != nil {
+		return nil, err
+	}
 	if err := s.ensureCreateAllowedByCeiling(ctx, viewer, normalized); err != nil {
 		return nil, err
 	}
@@ -2262,6 +2265,8 @@ func (s *Service) submitClaimed(ctx context.Context, req Request, actor Viewer, 
 		return done, err
 	}
 	s.populateRequesterIdentity(ctx, &req)
+	// A requester's quality profile replaces the server's own.
+	conns = applyRequesterProfile(req, conns)
 	targets, msg, err := s.router.Fulfill(ctx, installationID, capabilityID, req, plan.want, conns)
 	if err != nil {
 		return nil, err
@@ -2339,6 +2344,10 @@ func (s *Service) submitRouted(ctx context.Context, req Request, actor Viewer, f
 			}
 		}
 		maps.Copy(connKind, connectionKindByID([]ResolvedRouterConnection{conn}))
+		// The requester's pick replaces the server's own profile.
+		if pickedConns := applyRequesterProfile(req, []ResolvedRouterConnection{conn}); len(pickedConns) == 1 {
+			conn = pickedConns[0]
+		}
 		got, msg, err := s.router.Fulfill(ctx, installationID, capabilityID, req, []Quality{q}, []ResolvedRouterConnection{conn})
 		if err != nil {
 			if len(targets) == 0 {

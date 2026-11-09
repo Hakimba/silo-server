@@ -2102,6 +2102,13 @@ export interface CreateMediaRequestInput {
   backdrop_path?: string;
   /** Series only: the seasons to request. Omitted: every aired season not yet in the library. */
   seasons?: number[];
+  /**
+   * The quality profile to download with, from the profile picker. Omitted:
+   * the server's own profile. A 4K profile also asks for the 1080 copy.
+   */
+  quality_profile_id?: number;
+  /** The download server the profile belongs to, when two servers share a profile id. */
+  quality_profile_connection_id?: string;
 }
 
 /** The download server details (integration_*, instance_name, route_name, external_*, last_error) reach admins only. */
@@ -2163,6 +2170,10 @@ export interface MediaRequest {
    * (adding the title to a watchlist). The server may add values.
    */
   source?: string;
+  /** The Sonarr/Radarr quality profile the requester picked, when they picked one. */
+  quality_profile_id?: number;
+  /** That profile's name when the request was made. */
+  quality_profile_name?: string;
   created_at: string;
   updated_at: string;
   approved_at?: string;
@@ -2191,7 +2202,37 @@ export interface RequestSettings {
    * value is kept.
    */
   watchlist_requests?: boolean;
+  /** Requesters pick the quality profile their request downloads with. */
+  requester_quality_profiles?: boolean;
+  /** Profiles the picker offers, each "connection-id:profile-id"; empty offers every profile. */
+  requester_quality_profile_allowlist?: string[];
   updated_at: string;
+}
+
+/** One Sonarr/Radarr quality profile a requester may pick for a request. */
+export interface RequestProfileOption {
+  id: number;
+  name: string;
+  /**
+   * The server's own profile, offered so the dialog can name it. Picking it
+   * sends no profile, so the server keeps applying it.
+   */
+  default: boolean;
+}
+
+export interface RequestProfileServer {
+  connection_id: string;
+  server_name: string;
+  profiles: RequestProfileOption[];
+}
+
+/**
+ * What the request dialog offers: whether requesters may choose a profile, and
+ * each download server's profiles for the media type.
+ */
+export interface RequestProfileOptions {
+  enabled: boolean;
+  servers: RequestProfileServer[];
 }
 
 export interface RequestUserLimit {

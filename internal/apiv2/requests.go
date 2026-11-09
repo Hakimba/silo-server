@@ -227,6 +227,8 @@ type MediaRequest struct {
 	SeasonProgress       []RequestSeasonProgress `json:"season_progress" doc:"Series season requests: each requested season's episodes, once the series is in the library; empty otherwise"`
 	OutcomeReason        string                  `json:"outcome_reason,omitempty" doc:"Why the request was declined or withdrawn, when a reason was given"`
 	Source               string                  `json:"source" doc:"What created the request: direct (the Request button or an API create) or watchlist (adding a title that is not in the library to a watchlist); more values may be added" example:"direct"`
+	QualityProfileID     *int                    `json:"quality_profile_id,omitempty" doc:"The Sonarr/Radarr quality profile the requester picked; absent when the server's own profile is used" example:"4"`
+	QualityProfileName   string                  `json:"quality_profile_name,omitempty" doc:"That profile's name when the request was made, for display after the profile is renamed or deleted" example:"French HD 1080p"`
 	RequestedByUserID    ID                      `json:"requested_by_user_id,omitempty" example:"1"`
 	RequestedByProfileID ID                      `json:"requested_by_profile_id,omitempty" example:"p-owner"`
 	IntegrationKind      string                  `json:"integration_kind,omitempty" doc:"Admins only: the download server's kind" example:"radarr"`
@@ -266,6 +268,12 @@ type MediaRequestCreate struct {
 	PosterPath   string `json:"poster_path,omitempty" doc:"TMDB image path"`
 	BackdropPath string `json:"backdrop_path,omitempty" doc:"TMDB image path"`
 	Seasons      []int  `json:"seasons,omitempty" maxItems:"200" doc:"Series only: the season numbers to request, starting at 1 (a season below 1 is refused). Omitted: every aired season not yet complete in the library" example:"[2,3]"`
+	// QualityProfileID is the profile from getRequestProfileOptions the
+	// requester picked. Omitted: the server's own profile, as before.
+	QualityProfileID *int `json:"quality_profile_id,omitempty" minimum:"1" doc:"Quality profile to download with, from getRequestProfileOptions. A 4K profile also asks for the 1080 copy; any other profile keeps the download HD only. Omitted: the server's configured profile" example:"4"`
+	// QualityProfileConnectionID names the server the profile belongs to,
+	// needed only when two servers publish the same profile id.
+	QualityProfileConnectionID string `json:"quality_profile_connection_id,omitempty" doc:"The download server the profile belongs to, from getRequestProfileOptions; only needed when two servers share a profile id"`
 }
 
 // MediaRequestCreateInput is the createRequest request.
@@ -391,6 +399,8 @@ func registerRequests(reg *Registry) {
 	create.Errors = []int{http.StatusConflict, http.StatusTooManyRequests}
 	Register(reg, Operation{Operation: create, Class: ClassProfileScoped, DemoRestricted: isMutatingMethod(create.Method), ServiceBacked: true, RetrySafety: RetrySafetyNonRetryable}, reg.createRequest)
 
+	registerRequestProfileOptions(reg)
+
 	Register(reg, Operation{
 		Operation: humaOp(http.MethodGet, Prefix+"/requests/mine", opListMyRequests, requestsTag,
 			"List the account's media requests, newest first."),
@@ -513,16 +523,18 @@ func (reg *Registry) createRequest(ctx context.Context, in *MediaRequestCreateIn
 		return nil, p
 	}
 	req, err := svc.CreateRequest(ctx, viewer, mediarequests.CreateRequestInput{
-		MediaType:    mediarequests.MediaType(in.Body.MediaType),
-		TMDBID:       in.Body.TMDBID,
-		TVDBID:       in.Body.TVDBID,
-		IMDbID:       in.Body.IMDbID,
-		Title:        in.Body.Title,
-		Year:         in.Body.Year,
-		Overview:     in.Body.Overview,
-		PosterPath:   in.Body.PosterPath,
-		BackdropPath: in.Body.BackdropPath,
-		Seasons:      in.Body.Seasons,
+		MediaType:                  mediarequests.MediaType(in.Body.MediaType),
+		TMDBID:                     in.Body.TMDBID,
+		TVDBID:                     in.Body.TVDBID,
+		IMDbID:                     in.Body.IMDbID,
+		Title:                      in.Body.Title,
+		Year:                       in.Body.Year,
+		Overview:                   in.Body.Overview,
+		PosterPath:                 in.Body.PosterPath,
+		BackdropPath:               in.Body.BackdropPath,
+		Seasons:                    in.Body.Seasons,
+		QualityProfileID:           in.Body.QualityProfileID,
+		QualityProfileConnectionID: in.Body.QualityProfileConnectionID,
 	})
 	if err != nil {
 		return nil, requestProblem(err)
@@ -826,32 +838,34 @@ func requestSourceOf(s mediarequests.Source) mediarequests.Source {
 // quality, status and download progress.
 func mediaRequestOf(r *mediarequests.Request, viewer mediarequests.Viewer) MediaRequest {
 	out := MediaRequest{
-		ID:               ID(r.ID),
-		Provider:         r.Provider,
-		MediaType:        string(r.MediaType),
-		TMDBID:           r.TMDBID,
-		TVDBID:           r.TVDBID,
-		IMDbID:           r.IMDbID,
-		Title:            r.Title,
-		Year:             r.Year,
-		Overview:         r.Overview,
-		PosterPath:       r.PosterPath,
-		BackdropPath:     r.BackdropPath,
-		Status:           string(r.Status),
-		Outcome:          string(r.Outcome),
-		State:            string(r.State()),
-		Seasons:          NonNil(r.Seasons),
-		SeasonProgress:   requestSeasonProgressOf(r.SeasonProgress),
-		OutcomeReason:    r.OutcomeReason,
-		Source:           string(requestSourceOf(r.Source)),
-		IsAnime:          r.IsAnime,
-		Targets:          make([]RequestTarget, 0, len(r.Targets)),
-		LibraryContentID: r.LibraryContentID,
-		CreatedAt:        NewInstant(r.CreatedAt),
-		UpdatedAt:        NewInstant(r.UpdatedAt),
-		ApprovedAt:       instantPtr(r.ApprovedAt),
-		CompletedAt:      instantPtr(r.CompletedAt),
-		Download:         requestDownloadOf(r.Download()),
+		ID:                 ID(r.ID),
+		Provider:           r.Provider,
+		MediaType:          string(r.MediaType),
+		TMDBID:             r.TMDBID,
+		TVDBID:             r.TVDBID,
+		IMDbID:             r.IMDbID,
+		Title:              r.Title,
+		Year:               r.Year,
+		Overview:           r.Overview,
+		PosterPath:         r.PosterPath,
+		BackdropPath:       r.BackdropPath,
+		Status:             string(r.Status),
+		Outcome:            string(r.Outcome),
+		State:              string(r.State()),
+		Seasons:            NonNil(r.Seasons),
+		SeasonProgress:     requestSeasonProgressOf(r.SeasonProgress),
+		OutcomeReason:      r.OutcomeReason,
+		Source:             string(requestSourceOf(r.Source)),
+		QualityProfileID:   r.QualityProfileID,
+		QualityProfileName: r.QualityProfileName,
+		IsAnime:            r.IsAnime,
+		Targets:            make([]RequestTarget, 0, len(r.Targets)),
+		LibraryContentID:   r.LibraryContentID,
+		CreatedAt:          NewInstant(r.CreatedAt),
+		UpdatedAt:          NewInstant(r.UpdatedAt),
+		ApprovedAt:         instantPtr(r.ApprovedAt),
+		CompletedAt:        instantPtr(r.CompletedAt),
+		Download:           requestDownloadOf(r.Download()),
 	}
 	if viewer.IsAdmin {
 		out.IntegrationKind, out.ExternalID, out.ExternalStatus, out.LastError = r.IntegrationKind, r.ExternalID, r.ExternalStatus, r.LastError
