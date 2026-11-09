@@ -79,7 +79,7 @@ jobs:
       contents: read
       actions: read
       packages: write
-    uses: Silo-Server/silo-server/.github/workflows/trusted-linux-build.yml@main
+    uses: ./.github/workflows/trusted-linux-build.yml
     with:
       platform: ${{ matrix.platform }}
       build_number: ${{ needs.prepare.outputs.build_number }}
@@ -138,7 +138,7 @@ jobs:
     permissions:
       contents: read
       packages: write
-    uses: Silo-Server/silo-server/.github/workflows/omnibus-build.yml@main
+    uses: ./.github/workflows/omnibus-build.yml
     with:
       platform: ${{ matrix.platform }}
       base_tag: ${{ github.event.workflow_run.head_sha || github.sha }}-base
