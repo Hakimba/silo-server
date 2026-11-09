@@ -1,0 +1,49 @@
+name: Regenerate API contract (temporary)
+
+# Development aid on a fork: the sandbox that authored this branch cannot
+# compile the apiv2 package or run pnpm, so the generated contract is produced
+# here and committed back. Remove this file before opening a pull request.
+
+on:
+  push:
+    branches: [feature/requester-quality-profile]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  regenerate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/requester-quality-profile
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.4"
+      - name: Generate the OpenAPI artifact
+        run: go run ./cmd/apiv2-openapi -out contracts/api/v2/openapi.json
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.32.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Install the web dependencies
+        working-directory: web
+        run: pnpm install --frozen-lockfile
+      - name: Generate the web contract types
+        working-directory: web
+        run: pnpm run generate:apiv2
+      - name: Commit the regenerated files
+        run: |
+          git config user.name "hermes-agent"
+          git config user.email "agent@hermes.local"
+          git add contracts/api/v2/openapi.json web/src/api/v2/schema.ts
+          if git diff --cached --quiet; then
+            echo "contract already up to date"
+          else
+            git commit -m "chore: regenerate the api contract"
+            git push
+          fi
